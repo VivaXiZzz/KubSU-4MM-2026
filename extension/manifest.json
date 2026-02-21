@@ -5,5 +5,18 @@
   "manifest_version": 3,
   "action": {
     "default_popup": "popup/popup.html"
+  },
+  "content_scripts": [
+    {
+      "js": ["content-script.js"],
+      "matches": [
+        "https://*/*"
+      ]
+    }
+  ],
+  "background": {
+    "service-worker": "service-worker.js"
   }
 }
+
+
