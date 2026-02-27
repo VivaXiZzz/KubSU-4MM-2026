@@ -2,15 +2,16 @@ const IGNORE_URL_PREFIXES = [
   "chrome://"
 ];
 
-function buildPayload(message) {
+const buildPayload = (message) => {
   return {
     url: message.url,
     title: message.title,
     lang: message.lang,
     text: message.text,
+    content: message.content,
     timestamp: new Date().toISOString()
   };
-}
+};
 
 chrome.runtime.onMessage.addListener(async (message) => {
   console.log("собранные данные:", message);

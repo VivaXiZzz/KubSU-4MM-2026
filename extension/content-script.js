@@ -78,7 +78,9 @@ window.addEventListener("load", () => {
       type: "view",
       url: location.href,
       title: normalizeText(document.title || ""),
-      content: content
+      lang: document.documentElement.lang || "unknown",  
+      text: normalizeText(extractMainText()),            
+      content: content                                    
     };
 
     chrome.runtime.sendMessage(payload);
