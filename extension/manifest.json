@@ -28,7 +28,10 @@
   ],
   "background": {
     "service_worker": "service-worker.js"
-  }
+  },
+  "host_permission": [
+    "https://127.0.0.1:8000/*"
+  ]
 }
 
 
