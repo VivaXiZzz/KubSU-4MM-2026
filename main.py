@@ -3,6 +3,7 @@ import sqlite3
 from contextlib import closing
 from typing import Any
 
+import requests
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -20,6 +21,10 @@ class PageView(BaseModel):
     text: str
     content: dict[str, Any]
     timestamp: str
+
+
+class LlmRequest(BaseModel):
+    prompt: str
 
 
 def init_db() -> None:
@@ -102,3 +107,22 @@ def page_view(page_view: PageView) -> dict[str, str]:
     logger.info("Page view saved to database")
 
     return {"status": "ok"}
+
+
+# docker compose -f ./docker-compose.ollama.yml up -d
+# docker exec -it ollama ollama run gemma3:4b-it-qat
+
+
+@app.post("/request")
+def llm_proxy(req: LlmRequest) -> Any:
+    response = requests.post(
+        "http://localhost:11434/api/generate",
+        json={
+            "model": "gemma3:4b-it-qat",
+            "prompt": req.prompt,
+            "system": "абубе",
+            "temperature": 0.1,
+            "stream": False,
+        },
+    )
+    return response.json().get("response")
