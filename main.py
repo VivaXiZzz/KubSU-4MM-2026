@@ -1,6 +1,7 @@
 import logging
 import sqlite3
 from contextlib import closing
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import requests
@@ -25,6 +26,11 @@ class PageView(BaseModel):
 
 class LlmRequest(BaseModel):
     prompt: str
+
+
+class SummarizeRequest(BaseModel):
+    hours: int
+    tone: str
 
 
 def init_db() -> None:
@@ -126,3 +132,72 @@ def llm_proxy(req: LlmRequest) -> Any:
         },
     )
     return response.json().get("response")
+
+
+@app.post("/summarize")
+def summarize_history(req: SummarizeRequest) -> dict[str, str]:
+    cutoff_time = (datetime.now(UTC) - timedelta(hours=req.hours)).isoformat()
+
+    with closing(sqlite3.connect(DB_PATH)) as conn:
+        cursor = conn.execute(
+            "SELECT title, url FROM page_views WHERE timestamp >= ? ORDER BY timestamp ASC",
+            (cutoff_time,),
+        )
+        rows = cursor.fetchall()
+
+    if not rows:
+        return {
+            "summary": "За этот период нет данных. Либо ты не сидел в интернете, либо расширение не отправляло данные."
+        }
+
+    history_lines = [f"- {row[0]} ({row[1]})" for row in rows]
+
+    if len(history_lines) > 200:
+        history_lines = history_lines[-200:]
+        history_lines.insert(0, "[...часть старой истории обрезана...]")
+
+    history_text = "\n".join(history_lines)
+
+    if req.tone == "joke":
+        system_prompt = (
+            "Ты ехидный, саркастичный и немного токсичный критик. "
+            "Твоя задача — проанализировать историю браузера пользователя "
+            "и смешно высмеять то, на что он тратит свое время. "
+            "Пиши коротко, емко и на русском языке."
+        )
+        temperature = 0.8
+    else:
+        system_prompt = (
+            "Ты строгий аналитик продуктивности. Проанализируй историю браузера "
+            "пользователя. Сделай краткую структурированную выжимку: на какие "
+            "темы потрачено время, какие задачи решались, насколько продуктивным "
+            "выглядит этот серфинг. Пиши четко, по делу, на русском языке."
+        )
+        temperature = 0.3
+
+    if not rows:
+        return {
+            "summary": (
+                "За этот период нет данных. Либо ты не сидел в интернете, либо расширение не отправляло данные."
+            )
+        }
+
+    user_prompt = f"Вот моя история браузера за последние {req.hours} часов:\n\n{history_text}\n\nЧто скажешь?"
+
+    logger.info(f"Отправляем запрос в Ollama, собрано {len(rows)} записей.")
+
+    response = requests.post(
+        "http://localhost:11434/api/generate",
+        json={
+            "model": "gemma3:4b-it-qat",
+            "prompt": user_prompt,
+            "system": system_prompt,
+            "temperature": temperature,
+            "stream": False,
+        },
+    )
+
+    if response.status_code == 200:
+        return {"summary": response.json().get("response", "Пустой ответ от модели.")}
+    else:
+        return {"summary": f"Ошибка Ollama: {response.status_code}"}
